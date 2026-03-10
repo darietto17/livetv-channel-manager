@@ -44,9 +44,9 @@ function generateM3U(channels) {
 
 const PASSWORD = import.meta.env.VITE_APP_PASSWORD || 'admin';
 const GITHUB_REPO_URLS = [
-  { name: 'Live', url: 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/master/lista.m3u' },
-  { name: 'Film', url: 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/master/film.m3u' },
-  { name: 'Serie', url: 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/master/serie.m3u' },
+  { name: 'Live', path: 'lista.m3u', url: 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/master/lista.m3u' },
+  { name: 'Film', path: 'film.m3u', url: 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/master/film.m3u' },
+  { name: 'Serie', path: 'serie.m3u', url: 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/master/serie.m3u' },
 ];
 
 export default function App() {
@@ -58,6 +58,8 @@ export default function App() {
   const [editingId, setEditingId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('All');
+  const [currentFile, setCurrentFile] = useState(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Basic login
   const handleLogin = (e) => {
@@ -94,19 +96,78 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  const handleGitHubImport = async (url) => {
+  const handleGitHubImport = async (repoInfo) => {
     setIsLoading(true);
     try {
-      const response = await fetch(url + '?t=' + new Date().getTime()); // cache bypass
+      const response = await fetch(repoInfo.url + '?t=' + new Date().getTime()); // cache bypass
       if (!response.ok) throw new Error(`HTTP ${response.status} - Impossibile scaricare la playlist`);
       const text = await response.text();
       const parsed = parseM3U(text);
       setChannels(parsed);
+      setCurrentFile(repoInfo.path);
       setActiveTab('All'); // Reset tab to see all
     } catch (err) {
       alert('Errore durante il download da GitHub: ' + err.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleGitHubExport = async () => {
+    if (!currentFile) return;
+
+    let token = localStorage.getItem('githubToken');
+    if (!token) {
+      token = window.prompt("Inserisci il tuo GitHub Personal Access Token (classic) con permessi 'repo' per salvare le modifiche direttamente sulla tua repository:");
+      if (!token) return;
+      localStorage.setItem('githubToken', token);
+    }
+
+    setIsExporting(true);
+    try {
+      const content = generateM3U(channels);
+      // Base64 encode representing UTF-8 string properly
+      const encodedContent = btoa(unescape(encodeURIComponent(content)));
+
+      const repoPath = 'darietto17/LiveTvPremium';
+      const apiUrl = `https://api.github.com/repos/${repoPath}/contents/${currentFile}`;
+
+      // 1. Fetch current file SHA
+      const getRes = await fetch(apiUrl, {
+        headers: { Authorization: `token ${token}` }
+      });
+
+      if (!getRes.ok) {
+        if (getRes.status === 401) {
+          localStorage.removeItem('githubToken');
+          throw new Error("Token non valido o scaduto. Riprova.");
+        }
+        throw new Error("Impossibile recuperare i dettagli del file da GitHub.");
+      }
+      const fileData = await getRes.json();
+
+      // 2. Upload new content via PUT
+      const putRes = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+          Authorization: `token ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: `Update ${currentFile} via Web App`,
+          content: encodedContent,
+          sha: fileData.sha,
+          branch: 'master'
+        })
+      });
+
+      if (!putRes.ok) throw new Error("Errore durante il salvataggio su GitHub.");
+
+      alert(`Perfetto! Il file ${currentFile} è stato aggiornato con successo sulla repository.`);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -217,23 +278,34 @@ export default function App() {
               {GITHUB_REPO_URLS.map(repo => (
                 <button
                   key={repo.name}
-                  onClick={() => handleGitHubImport(repo.url)}
+                  onClick={() => handleGitHubImport(repo)}
                   disabled={isLoading}
-                  className="px-4 py-2 hover:bg-slate-700 transition-colors text-sm font-medium border-r border-slate-700 last:border-0"
+                  className={`px-4 py-2 hover:bg-slate-700 transition-colors text-sm font-medium border-r border-slate-700 last:border-0 ${currentFile === repo.path ? 'bg-indigo-500/20 text-indigo-300' : ''}`}
                 >
                   {repo.name}
                 </button>
               ))}
             </div>
 
-            <button
-              onClick={handleExport}
-              disabled={channels.length === 0}
-              className="flex justify-center items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 transition-colors rounded-lg font-medium text-sm shadow-lg shadow-indigo-900/20"
-            >
-              <Download className="w-4 h-4" />
-              <span>Esporta</span>
-            </button>
+            {currentFile ? (
+              <button
+                onClick={handleGitHubExport}
+                disabled={channels.length === 0 || isExporting}
+                className="flex justify-center items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 transition-colors rounded-lg font-medium text-sm shadow-lg shadow-emerald-900/20"
+              >
+                {isExporting ? <span className="animate-spin inline-block w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></span> : <Github className="w-4 h-4" />}
+                <span>Salva su GitHub</span>
+              </button>
+            ) : (
+              <button
+                onClick={handleExport}
+                disabled={channels.length === 0}
+                className="flex justify-center items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 transition-colors rounded-lg font-medium text-sm shadow-lg shadow-indigo-900/20"
+              >
+                <Download className="w-4 h-4" />
+                <span>Esporta Locale</span>
+              </button>
+            )}
 
             <button
               onClick={handleLogout}
