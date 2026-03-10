@@ -239,7 +239,12 @@ export default function App() {
 
     // Handle Groups dragging
     if (result.type === 'GROUP') {
-      const newGroupsOrder = Array.from(rules.groupsOrder || Array.from(new Set(channels.map(c => c.group))).filter(Boolean));
+      const groupsRaw = [...new Set(channels.map(c => c.group))].filter(Boolean);
+      const currentGroupsOrdered = rules.groupsOrder && rules.groupsOrder.length > 0
+        ? [...new Set([...rules.groupsOrder.filter(g => groupsRaw.includes(g)), ...groupsRaw])]
+        : groupsRaw;
+
+      const newGroupsOrder = Array.from(currentGroupsOrdered);
       const [reorderedGroup] = newGroupsOrder.splice(result.source.index, 1);
       newGroupsOrder.splice(result.destination.index, 0, reorderedGroup);
 
@@ -252,6 +257,12 @@ export default function App() {
     }
 
     // Handle Channels dragging
+    // ONLY allow dragging in 'All' tab and NO search term to avoid index confusion
+    if (activeTab !== 'All' || searchTerm.trim() !== '') {
+      alert("L'ordinamento manuale dei canali è disponibile solo nella scheda 'All' senza filtri di ricerca attivi.");
+      return;
+    }
+
     const items = Array.from(channels);
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
