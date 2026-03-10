@@ -2,6 +2,18 @@ import { useState, useEffect } from 'react';
 import { Settings, Upload, Download, GripVertical, Trash2, Search, Edit3, Github, Lock, LogOut } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
+function loadRules() {
+  const saved = localStorage.getItem('channelManagerRules');
+  if (saved) {
+    try { return JSON.parse(saved); } catch (e) { }
+  }
+  return { items: {}, order: [], groupsOrder: [] };
+}
+
+function saveRules(rules) {
+  localStorage.setItem('channelManagerRules', JSON.stringify(rules));
+}
+
 function parseM3U(content) {
   const lines = content.split('\n');
   const channels = [];
@@ -13,12 +25,13 @@ function parseM3U(content) {
       const tvgLogoMatch = l.match(/tvg-logo="([^"]*)"/);
       const groupTitleMatch = l.match(/group-title="([^"]*)"/);
       const parts = l.split(',');
-      const name = parts.length > 1 ? parts[1].trim() : 'Unknown Channel';
+      const originalName = parts.length > 1 ? parts[1].trim() : 'Unknown Channel';
 
       currentChannel = {
         id: Math.random().toString(36).substr(2, 9),
         rawExtInf: l,
-        name,
+        originalName,
+        name: originalName,
         logo: tvgLogoMatch ? tvgLogoMatch[1] : '',
         group: groupTitleMatch ? groupTitleMatch[1] : '',
         url: ''
@@ -32,6 +45,35 @@ function parseM3U(content) {
     }
   });
   return channels;
+}
+
+function applyRules(parsedChannels, rules) {
+  let mapped = parsedChannels.map(ch => {
+    const r = rules.items[ch.originalName];
+    if (r) {
+      if (r.hidden) return null;
+      return {
+        ...ch,
+        name: r.name !== undefined ? r.name : ch.name,
+        group: r.group !== undefined ? r.group : ch.group,
+        logo: r.logo !== undefined ? r.logo : ch.logo,
+        url: r.url !== undefined ? r.url : ch.url,
+      };
+    }
+    return ch;
+  }).filter(Boolean);
+
+  if (rules.order && rules.order.length > 0) {
+    const orderMap = {};
+    rules.order.forEach((orig, idx) => { orderMap[orig] = idx; });
+
+    mapped.sort((a, b) => {
+      const idxA = orderMap[a.originalName] !== undefined ? orderMap[a.originalName] : 999999;
+      const idxB = orderMap[b.originalName] !== undefined ? orderMap[b.originalName] : 999999;
+      return idxA - idxB;
+    });
+  }
+  return mapped;
 }
 
 function generateM3U(channels) {
@@ -60,6 +102,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('All');
   const [currentFile, setCurrentFile] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [rules, setRules] = useState(loadRules());
 
   // Basic login
   const handleLogin = (e) => {
@@ -91,7 +134,9 @@ export default function App() {
     reader.onload = (e) => {
       const content = e.target.result;
       const parsed = parseM3U(content);
-      setChannels(parsed);
+      const applied = applyRules(parsed, rules);
+      setChannels(applied);
+      setCurrentFile(null);
     };
     reader.readAsText(file);
   };
@@ -103,7 +148,8 @@ export default function App() {
       if (!response.ok) throw new Error(`HTTP ${response.status} - Impossibile scaricare la playlist`);
       const text = await response.text();
       const parsed = parseM3U(text);
-      setChannels(parsed);
+      const applied = applyRules(parsed, rules);
+      setChannels(applied);
       setCurrentFile(repoInfo.path);
       setActiveTab('All'); // Reset tab to see all
     } catch (err) {
@@ -182,20 +228,65 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const updateRule = (originalName, updates) => {
+    setRules(prev => {
+      const newRules = { ...prev };
+      newRules.items = { ...newRules.items };
+      newRules.items[originalName] = { ...(newRules.items[originalName] || {}), ...updates };
+      saveRules(newRules);
+      return newRules;
+    });
+  };
+
   const onDragEnd = (result) => {
     if (!result.destination) return;
+
+    // Handle Groups dragging
+    if (result.type === 'GROUP') {
+      const newGroupsOrder = Array.from(rules.groupsOrder || Array.from(new Set(channels.map(c => c.group))).filter(Boolean));
+      const [reorderedGroup] = newGroupsOrder.splice(result.source.index, 1);
+      newGroupsOrder.splice(result.destination.index, 0, reorderedGroup);
+
+      setRules(prev => {
+        const newRules = { ...prev, groupsOrder: newGroupsOrder };
+        saveRules(newRules);
+        return newRules;
+      });
+      return;
+    }
+
+    // Handle Channels dragging
     const items = Array.from(channels);
     const [reorderedItem] = items.splice(result.source.index, 1);
     items.splice(result.destination.index, 0, reorderedItem);
     setChannels(items);
+
+    // Save new channel order to rules
+    setRules(prev => {
+      const newRules = { ...prev, order: items.map(c => c.originalName) };
+      saveRules(newRules);
+      return newRules;
+    });
   };
 
   const updateChannel = (id, field, value) => {
-    setChannels(chs => chs.map(ch => ch.id === id ? { ...ch, [field]: value } : ch));
+    let origName = null;
+    setChannels(chs => chs.map(ch => {
+      if (ch.id === id) {
+        origName = ch.originalName;
+        return { ...ch, [field]: value };
+      }
+      return ch;
+    }));
+    if (origName) updateRule(origName, { [field]: value });
   };
 
   const removeChannel = (id) => {
-    setChannels(chs => chs.filter(ch => ch.id !== id));
+    const channelToRemove = channels.find(c => c.id === id);
+    if (channelToRemove) {
+      updateRule(channelToRemove.originalName, { hidden: true });
+      setChannels(chs => chs.filter(ch => ch.id !== id));
+    }
   };
 
   const handleRenameGroup = (oldName) => {
@@ -203,9 +294,48 @@ export default function App() {
     const newName = window.prompt(`Rinomina il gruppo "${oldName}" in:`, oldName);
     if (newName !== null && newName.trim() !== '' && newName !== oldName) {
       const trimmed = newName.trim();
-      setChannels(chs => chs.map(ch => ch.group === oldName ? { ...ch, group: trimmed } : ch));
+      const affectedOriginals = [];
+
+      setChannels(chs => chs.map(ch => {
+        if (ch.group === oldName) {
+          affectedOriginals.push(ch.originalName);
+          return { ...ch, group: trimmed };
+        }
+        return ch;
+      }));
+
+      // Update rules in bulk for renamed group
+      setRules(prev => {
+        const newRules = { ...prev };
+        newRules.items = { ...newRules.items };
+        affectedOriginals.forEach(orig => {
+          newRules.items[orig] = { ...(newRules.items[orig] || {}), group: trimmed };
+        });
+
+        // Also update groupsOrder if it exists
+        if (newRules.groupsOrder) {
+          newRules.groupsOrder = newRules.groupsOrder.map(g => g === oldName ? trimmed : g);
+        }
+        saveRules(newRules);
+        return newRules;
+      });
+
       if (activeTab === oldName) {
         setActiveTab(trimmed);
+      }
+    }
+  };
+
+  const clearRules = () => {
+    if (window.confirm("Sei sicuro di voler ripristinare tutte le modifiche salvate localmente? Questa operazione ricaricherà i file originali.")) {
+      const emptyRules = { items: {}, order: [], groupsOrder: [] };
+      saveRules(emptyRules);
+      setRules(emptyRules);
+      if (currentFile) {
+        const repo = GITHUB_REPO_URLS.find(r => r.path === currentFile);
+        if (repo) handleGitHubImport(repo);
+      } else {
+        setChannels([]);
       }
     }
   };
@@ -239,8 +369,12 @@ export default function App() {
     );
   }
 
-  // Determine unique groups for tabs
-  const groups = ['All', ...new Set(channels.map(c => c.group))].filter(Boolean);
+  // Determine unique groups for tabs, sorted by rules.groupsOrder if available
+  const groupsRaw = [...new Set(channels.map(c => c.group))].filter(Boolean);
+  const groupsOrdered = rules.groupsOrder && rules.groupsOrder.length > 0
+    ? [...new Set([...rules.groupsOrder.filter(g => groupsRaw.includes(g)), ...groupsRaw])]
+    : groupsRaw;
+  const groups = ['All', ...groupsOrdered];
 
   let filteredChannels = channels.filter(ch =>
     ch.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -340,29 +474,61 @@ export default function App() {
               <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 sticky top-24">
                 <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Gruppi ({groups.length - 1})</h3>
                 <div className="space-y-1 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-                  {groups.map(g => (
-                    <div key={g} className="flex items-center group relative">
-                      <button
-                        onClick={() => setActiveTab(g)}
-                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${activeTab === g
-                          ? 'bg-indigo-500/20 text-indigo-300 font-medium border border-indigo-500/30'
-                          : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                          }`}
-                      >
-                        {g || 'Senza Gruppo'}
-                      </button>
+                  <button
+                    onClick={() => setActiveTab('All')}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors mb-2 ${activeTab === 'All'
+                      ? 'bg-indigo-500/20 text-indigo-300 font-medium border border-indigo-500/30'
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                      }`}
+                  >
+                    All
+                  </button>
+                  <DragDropContext onDragEnd={onDragEnd}>
+                    <Droppable droppableId="groups-list" type="GROUP">
+                      {(provided) => (
+                        <div {...provided.droppableProps} ref={provided.innerRef}>
+                          {groups.filter(g => g !== 'All').map((g, index) => (
+                            <Draggable key={g} draggableId={`group-${g}`} index={index}>
+                              {(provided, snapshot) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  className={`flex items-center group relative ${snapshot.isDragging ? 'z-50 opacity-90' : ''}`}
+                                >
+                                  <div
+                                    {...provided.dragHandleProps}
+                                    className="p-1 px-2 text-slate-600 hover:text-slate-400 cursor-grab active:cursor-grabbing"
+                                  >
+                                    <GripVertical className="w-3 h-3" />
+                                  </div>
+                                  <button
+                                    onClick={() => setActiveTab(g)}
+                                    className={`w-full text-left px-2 py-2 rounded-lg text-sm transition-colors ${activeTab === g
+                                      ? 'bg-indigo-500/20 text-indigo-300 font-medium border border-indigo-500/30'
+                                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                                      }`}
+                                  >
+                                    {g || 'Senza Gruppo'}
+                                  </button>
 
-                      {g && g !== 'All' && activeTab === g && (
-                        <button
-                          onClick={() => handleRenameGroup(g)}
-                          className="absolute right-2 p-1.5 text-slate-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-md transition-colors"
-                          title="Rinomina Gruppo"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
+                                  {g && activeTab === g && (
+                                    <button
+                                      onClick={() => handleRenameGroup(g)}
+                                      className="absolute right-2 p-1.5 text-slate-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-md transition-colors"
+                                      title="Rinomina Gruppo"
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
+                        </div>
                       )}
-                    </div>
-                  ))}
+                    </Droppable>
+                  </DragDropContext>
                 </div>
               </div>
             </div>
