@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, Upload, Download, GripVertical, Trash2, Search, Edit3, Github, Lock, LogOut } from 'lucide-react';
+import { Settings, Upload, Download, GripVertical, Trash2, Search, Edit3, Github, Lock, LogOut, Eye, EyeOff } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 function loadRules() {
@@ -51,17 +51,17 @@ function applyRules(parsedChannels, rules) {
   let mapped = parsedChannels.map(ch => {
     const r = rules.items[ch.originalName];
     if (r) {
-      if (r.hidden) return null;
       return {
         ...ch,
         name: r.name !== undefined ? r.name : ch.name,
         group: r.group !== undefined ? r.group : ch.group,
         logo: r.logo !== undefined ? r.logo : ch.logo,
         url: r.url !== undefined ? r.url : ch.url,
+        disabled: r.hidden || false
       };
     }
     return ch;
-  }).filter(Boolean);
+  });
 
   if (rules.order && rules.order.length > 0) {
     const orderMap = {};
@@ -79,6 +79,7 @@ function applyRules(parsedChannels, rules) {
 function generateM3U(channels) {
   let output = '#EXTM3U\n';
   channels.forEach(ch => {
+    if (ch.disabled) return;
     output += `#EXTINF:-1 tvg-logo="${ch.logo}" group-title="${ch.group}",${ch.name}\n${ch.url}\n`;
   });
   return output;
@@ -281,12 +282,15 @@ export default function App() {
     if (origName) updateRule(origName, { [field]: value });
   };
 
-  const removeChannel = (id) => {
-    const channelToRemove = channels.find(c => c.id === id);
-    if (channelToRemove) {
-      updateRule(channelToRemove.originalName, { hidden: true });
-      setChannels(chs => chs.filter(ch => ch.id !== id));
-    }
+  const toggleChannelStatus = (id) => {
+    setChannels(chs => chs.map(ch => {
+      if (ch.id === id) {
+        const newStatus = !ch.disabled;
+        updateRule(ch.originalName, { hidden: newStatus });
+        return { ...ch, disabled: newStatus };
+      }
+      return ch;
+    }));
   };
 
   const handleRenameGroup = (oldName) => {
@@ -571,7 +575,9 @@ export default function App() {
                               {...provided.draggableProps}
                               className={`flex flex-col sm:flex-row items-center gap-4 p-3 rounded-xl border transition-all ${snapshot.isDragging
                                 ? 'bg-indigo-900/30 border-indigo-500/50 shadow-2xl scale-[1.02] z-50'
-                                : 'bg-slate-800/40 border-slate-700/50 hover:bg-slate-800 hover:border-slate-600'
+                                : channel.disabled
+                                  ? 'bg-slate-900 border-slate-800 opacity-50 grayscale hover:opacity-70 transition-opacity'
+                                  : 'bg-slate-800/40 border-slate-700/50 hover:bg-slate-800 hover:border-slate-600'
                                 }`}
                             >
                               <div
@@ -619,11 +625,11 @@ export default function App() {
                                   <Edit3 className="w-4 h-4" />
                                 </button>
                                 <button
-                                  onClick={() => removeChannel(channel.id)}
-                                  className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
-                                  title="Rimuovi"
+                                  onClick={() => toggleChannelStatus(channel.id)}
+                                  className={`p-2 rounded transition-colors ${channel.disabled ? 'text-emerald-400 hover:bg-emerald-500/10' : 'text-slate-400 hover:text-red-400 hover:bg-red-500/10'}`}
+                                  title={channel.disabled ? "Attiva" : "Disattiva"}
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  {channel.disabled ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                                 </button>
                               </div>
 
