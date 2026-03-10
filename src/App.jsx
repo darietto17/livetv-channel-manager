@@ -257,15 +257,28 @@ export default function App() {
     }
 
     // Handle Channels dragging
-    // ONLY allow dragging in 'All' tab and NO search term to avoid index confusion
-    if (activeTab !== 'All' || searchTerm.trim() !== '') {
-      alert("L'ordinamento manuale dei canali è disponibile solo nella scheda 'All' senza filtri di ricerca attivi.");
-      return;
+    const items = Array.from(channels);
+    const visibleItems = Array.from(filteredChannels);
+
+    const movedItem = visibleItems[result.source.index];
+    const targetItem = visibleItems[result.destination.index];
+
+    if (!movedItem || !targetItem) return;
+
+    // Find indices in master
+    const fromIndexMaster = items.findIndex(c => c.id === movedItem.id);
+    const [reorderedItem] = items.splice(fromIndexMaster, 1);
+
+    // Re-find target index in spliced master
+    const toIndexMaster = items.findIndex(c => c.id === targetItem.id);
+
+    // Insert based on relative movement in visible list
+    if (result.destination.index > result.source.index) {
+      items.splice(toIndexMaster + 1, 0, reorderedItem);
+    } else {
+      items.splice(toIndexMaster, 0, reorderedItem);
     }
 
-    const items = Array.from(channels);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
     setChannels(items);
 
     // Save new channel order to rules
@@ -652,7 +665,7 @@ export default function App() {
                                 />
                                 <div
                                   {...provided.dragHandleProps}
-                                  className="p-2 text-slate-500 hover:text-slate-300 cursor-grab active:cursor-grabbing self-center hidden sm:block"
+                                  className="p-2 text-slate-500 hover:text-slate-300 cursor-grab active:cursor-grabbing self-center"
                                 >
                                   <GripVertical className="w-5 h-5" />
                                 </div>
