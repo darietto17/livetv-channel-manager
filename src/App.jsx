@@ -137,6 +137,18 @@ export default function App() {
     setChannels(chs => chs.filter(ch => ch.id !== id));
   };
 
+  const handleRenameGroup = (oldName) => {
+    if (!oldName) return; // Non rinominare "Senza Gruppo"
+    const newName = window.prompt(`Rinomina il gruppo "${oldName}" in:`, oldName);
+    if (newName !== null && newName.trim() !== '' && newName !== oldName) {
+      const trimmed = newName.trim();
+      setChannels(chs => chs.map(ch => ch.group === oldName ? { ...ch, group: trimmed } : ch));
+      if (activeTab === oldName) {
+        setActiveTab(trimmed);
+      }
+    }
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
@@ -257,16 +269,27 @@ export default function App() {
                 <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Gruppi ({groups.length - 1})</h3>
                 <div className="space-y-1 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
                   {groups.map(g => (
-                    <button
-                      key={g}
-                      onClick={() => setActiveTab(g)}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${activeTab === g
-                        ? 'bg-indigo-500/20 text-indigo-300 font-medium border border-indigo-500/30'
-                        : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                        }`}
-                    >
-                      {g || 'Senza Gruppo'}
-                    </button>
+                    <div key={g} className="flex items-center group relative">
+                      <button
+                        onClick={() => setActiveTab(g)}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${activeTab === g
+                          ? 'bg-indigo-500/20 text-indigo-300 font-medium border border-indigo-500/30'
+                          : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                          }`}
+                      >
+                        {g || 'Senza Gruppo'}
+                      </button>
+
+                      {g && g !== 'All' && activeTab === g && (
+                        <button
+                          onClick={() => handleRenameGroup(g)}
+                          className="absolute right-2 p-1.5 text-slate-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-md transition-colors"
+                          title="Rinomina Gruppo"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
