@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, Upload, Download, GripVertical, Trash2, Search, Edit3, Github, Lock, LogOut, Eye, EyeOff } from 'lucide-react';
+import { Settings, Upload, Download, GripVertical, Trash2, Search, Edit3, Github, Lock, LogOut, Eye, EyeOff, Link, Copy, Check } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 function loadRules() {
@@ -105,6 +105,8 @@ export default function App() {
   const [isExporting, setIsExporting] = useState(false);
   const [rules, setRules] = useState(loadRules());
   const [selectedIds, setSelectedIds] = useState([]);
+  const [useProxyForLinks, setUseProxyForLinks] = useState(false);
+  const [copiedType, setCopiedType] = useState(null);
 
   // Basic login
   const handleLogin = (e) => {
@@ -121,6 +123,20 @@ export default function App() {
     setIsAuthenticated(false);
     sessionStorage.removeItem('auth');
     setChannels([]);
+  };
+
+  const copyToClipboard = (type) => {
+    const baseUrl = "https://raw.githubusercontent.com/darietto17/LiveTvAPI/main/";
+    const filename = type === 'Live' ? 'live.m3u' : type === 'Film' ? 'film.m3u' : 'series.m3u';
+    let url = baseUrl + filename;
+
+    if (useProxyForLinks) {
+      url = `https://eproxy.rrinformatica.cloud/proxy/manifest.m3u8?url=${encodeURIComponent(url)}`;
+    }
+
+    navigator.clipboard.writeText(url);
+    setCopiedType(type);
+    setTimeout(() => setCopiedType(null), 2000);
   };
 
   useEffect(() => {
@@ -585,6 +601,41 @@ export default function App() {
                       )}
                     </Droppable>
                   </DragDropContext>
+                </div>
+
+                {/* Playlist Links section */}
+                <div className="mt-8 pt-6 border-t border-slate-800">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                      <Link className="w-4 h-4" /> M3U Links
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-slate-500 font-medium">PROXY</span>
+                      <button
+                        onClick={() => setUseProxyForLinks(!useProxyForLinks)}
+                        className={`w-8 h-4 rounded-full relative transition-colors ${useProxyForLinks ? 'bg-indigo-500' : 'bg-slate-700'}`}
+                      >
+                        <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${useProxyForLinks ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {['Live', 'Film', 'Series'].map((type) => (
+                      <button
+                        key={type}
+                        onClick={() => copyToClipboard(type)}
+                        className="w-full flex items-center justify-between px-3 py-2 bg-slate-800/50 hover:bg-slate-800 border border-slate-700/50 rounded-lg text-xs text-slate-300 transition-all group"
+                      >
+                        <span>Playlist {type}</span>
+                        {copiedType === type ? (
+                          <Check className="w-3.5 h-3.5 text-green-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
