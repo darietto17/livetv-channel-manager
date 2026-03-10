@@ -97,7 +97,9 @@ export default function App() {
   const handleGitHubImport = async (url) => {
     setIsLoading(true);
     try {
-      const response = await fetch(url + '?t=' + new Date().getTime()); // cache bypass
+      // Use corsproxy.io to bypass GitHub raw CORS restrictions
+      const proxiedUrl = `https://corsproxy.io/?${encodeURIComponent(url)}&t=${new Date().getTime()}`;
+      const response = await fetch(proxiedUrl);
       if (!response.ok) throw new Error('Failed to fetch playlist');
       const text = await response.text();
       const parsed = parseM3U(text);
@@ -261,8 +263,8 @@ export default function App() {
                       key={g}
                       onClick={() => setActiveTab(g)}
                       className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${activeTab === g
-                          ? 'bg-indigo-500/20 text-indigo-300 font-medium border border-indigo-500/30'
-                          : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                        ? 'bg-indigo-500/20 text-indigo-300 font-medium border border-indigo-500/30'
+                        : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                         }`}
                     >
                       {g || 'Senza Gruppo'}
@@ -309,8 +311,8 @@ export default function App() {
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               className={`flex flex-col sm:flex-row items-center gap-4 p-3 rounded-xl border transition-all ${snapshot.isDragging
-                                  ? 'bg-indigo-900/30 border-indigo-500/50 shadow-2xl scale-[1.02] z-50'
-                                  : 'bg-slate-800/40 border-slate-700/50 hover:bg-slate-800 hover:border-slate-600'
+                                ? 'bg-indigo-900/30 border-indigo-500/50 shadow-2xl scale-[1.02] z-50'
+                                : 'bg-slate-800/40 border-slate-700/50 hover:bg-slate-800 hover:border-slate-600'
                                 }`}
                             >
                               <div
