@@ -145,11 +145,27 @@ export default function App() {
   const handleGitHubImport = async (repoInfo) => {
     setIsLoading(true);
     try {
-      const response = await fetch(repoInfo.url + '?t=' + new Date().getTime()); // cache bypass
-      if (!response.ok) throw new Error(`HTTP ${response.status} - Impossibile scaricare la playlist`);
-      const text = await response.text();
+      // 1. Fetch the M3U content
+      const m3uRes = await fetch(repoInfo.url + '?t=' + new Date().getTime());
+      if (!m3uRes.ok) throw new Error(`HTTP ${m3uRes.status} - Impossibile scaricare la playlist`);
+      const text = await m3uRes.text();
+
+      // 2. Try to fetch user_rules.json from the same repo (master branch)
+      let githubRules = rules;
+      try {
+        const rulesUrl = 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/master/user_rules.json';
+        const rulesRes = await fetch(rulesUrl + '?t=' + new Date().getTime());
+        if (rulesRes.ok) {
+          githubRules = await rulesRes.json();
+          setRules(githubRules);
+          saveRules(githubRules); // Update localStorage too
+        }
+      } catch (e) {
+        console.log("Nessun file user_rules.json trovato su GitHub, uso le regole locali.");
+      }
+
       const parsed = parseM3U(text);
-      const applied = applyRules(parsed, rules);
+      const applied = applyRules(parsed, githubRules);
       setChannels(applied);
       setCurrentFile(repoInfo.path);
       setActiveTab('All'); // Reset tab to see all
@@ -172,45 +188,51 @@ export default function App() {
 
     setIsExporting(true);
     try {
-      const content = generateM3U(channels);
-      // Base64 encode representing UTF-8 string properly
-      const encodedContent = btoa(unescape(encodeURIComponent(content)));
-
       const repoPath = 'darietto17/LiveTvPremium';
-      const apiUrl = `https://api.github.com/repos/${repoPath}/contents/${currentFile}`;
+      const tokenHeader = { Authorization: `token ${token}`, 'Content-Type': 'application/json' };
 
-      // 1. Fetch current file SHA
-      const getRes = await fetch(apiUrl, {
-        headers: { Authorization: `token ${token}` }
-      });
+      // --- 1. Save the M3U Playlist ---
+      const m3uContent = generateM3U(channels);
+      const m3uEncoded = btoa(unescape(encodeURIComponent(m3uContent)));
+      const m3uApiUrl = `https://api.github.com/repos/${repoPath}/contents/${currentFile}`;
 
-      if (!getRes.ok) {
-        if (getRes.status === 401) {
-          localStorage.removeItem('githubToken');
-          throw new Error("Token non valido o scaduto. Riprova.");
-        }
-        throw new Error("Impossibile recuperare i dettagli del file da GitHub.");
-      }
-      const fileData = await getRes.json();
+      const m3uGet = await fetch(m3uApiUrl, { headers: { Authorization: `token ${token}` } });
+      if (!m3uGet.ok && m3uGet.status !== 404) throw new Error("Errore nel recupero della playlist da GitHub.");
+      const m3uData = m3uGet.ok ? await m3uGet.json() : null;
 
-      // 2. Upload new content via PUT
-      const putRes = await fetch(apiUrl, {
+      const m3uPut = await fetch(m3uApiUrl, {
         method: 'PUT',
-        headers: {
-          Authorization: `token ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers: tokenHeader,
         body: JSON.stringify({
           message: `Update ${currentFile} via Web App`,
-          content: encodedContent,
-          sha: fileData.sha,
+          content: m3uEncoded,
+          sha: m3uData ? m3uData.sha : undefined,
           branch: 'master'
         })
       });
+      if (!m3uPut.ok) throw new Error("Errore durante il salvataggio della playlist su GitHub.");
 
-      if (!putRes.ok) throw new Error("Errore durante il salvataggio su GitHub.");
+      // --- 2. Save user_rules.json ---
+      const rulesContent = JSON.stringify(rules, null, 2);
+      const rulesEncoded = btoa(unescape(encodeURIComponent(rulesContent)));
+      const rulesApiUrl = `https://api.github.com/repos/${repoPath}/contents/user_rules.json`;
 
-      alert(`Perfetto! Il file ${currentFile} è stato aggiornato con successo sulla repository.`);
+      const rulesGet = await fetch(rulesApiUrl, { headers: { Authorization: `token ${token}` } });
+      const rulesData = rulesGet.ok ? await rulesGet.json() : null;
+
+      const rulesPut = await fetch(rulesApiUrl, {
+        method: 'PUT',
+        headers: tokenHeader,
+        body: JSON.stringify({
+          message: `Update user_rules.json via Web App`,
+          content: rulesEncoded,
+          sha: rulesData ? rulesData.sha : undefined,
+          branch: 'master'
+        })
+      });
+      if (!rulesPut.ok) throw new Error("Errore durante il salvataggio delle regole su GitHub.");
+
+      alert(`Perfetto! Le modifiche e le regole sono state salvate con successo sulla repository.`);
     } catch (err) {
       alert(err.message);
     } finally {
