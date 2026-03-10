@@ -183,20 +183,14 @@ export default function App() {
     setIsExporting(true);
     try {
       const saveToGithub = async (filePath, content, message) => {
-        // 1. Get current SHA first (to avoid 'merge' conflicts)
-        const getUrl = `https://api.github.com/repos/darietto17/LiveTvPremium/contents/${filePath}`;
-        const getRes = await fetch(getUrl);
-        const fileData = getRes.ok ? await getRes.json() : null;
-
-        // 2. Call our serverless proxy
+        // Call our serverless proxy (SHA lookup is handled internally)
         const res = await fetch('/api/save-github', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             path: filePath,
             content: btoa(unescape(encodeURIComponent(content))),
-            message: message,
-            sha: fileData ? fileData.sha : undefined
+            message: message
           })
         });
 
