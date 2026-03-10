@@ -104,6 +104,7 @@ export default function App() {
   const [currentFile, setCurrentFile] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
   const [rules, setRules] = useState(loadRules());
+  const [selectedIds, setSelectedIds] = useState([]);
 
   // Basic login
   const handleLogin = (e) => {
@@ -313,6 +314,39 @@ export default function App() {
       }
       return ch;
     }));
+  };
+
+  const toggleSelection = (id) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkToggleStatus = (disabled) => {
+    const selectedChannels = channels.filter(c => selectedIds.includes(c.id));
+    setChannels(chs => chs.map(ch => {
+      if (selectedIds.includes(ch.id)) {
+        updateRule(ch.originalName, { hidden: disabled });
+        return { ...ch, disabled };
+      }
+      return ch;
+    }));
+    setSelectedIds([]);
+  };
+
+  const handleBulkChangeGroup = () => {
+    const newGroup = window.prompt("Inserisci il nuovo nome del gruppo per i canali selezionati:");
+    if (newGroup === null) return;
+    const trimmed = newGroup.trim();
+
+    setChannels(chs => chs.map(ch => {
+      if (selectedIds.includes(ch.id)) {
+        updateRule(ch.originalName, { group: trimmed });
+        return { ...ch, group: trimmed };
+      }
+      return ch;
+    }));
+    setSelectedIds([]);
   };
 
   const handleRenameGroup = (oldName) => {
@@ -579,6 +613,23 @@ export default function App() {
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const allVisibleIds = filteredChannels.map(c => c.id);
+                      const allSelected = allVisibleIds.every(id => selectedIds.includes(id));
+                      if (allSelected) {
+                        setSelectedIds(prev => prev.filter(id => !allVisibleIds.includes(id)));
+                      } else {
+                        setSelectedIds(prev => [...new Set([...prev, ...allVisibleIds])]);
+                      }
+                    }}
+                    className="text-xs text-slate-400 hover:text-white px-2 py-1 bg-slate-800 rounded border border-slate-700 transition-colors"
+                  >
+                    {filteredChannels.every(c => selectedIds.includes(c.id)) ? 'Deseleziona Tutto' : 'Seleziona Tutti Visibili'}
+                  </button>
+                </div>
               </div>
 
               <DragDropContext onDragEnd={onDragEnd}>
@@ -597,16 +648,31 @@ export default function App() {
                               {...provided.draggableProps}
                               className={`flex flex-col sm:flex-row items-center gap-4 p-3 rounded-xl border transition-all ${snapshot.isDragging
                                 ? 'bg-indigo-900/30 border-indigo-500/50 shadow-2xl scale-[1.02] z-50'
-                                : channel.disabled
-                                  ? 'bg-slate-900 border-slate-800 opacity-50 grayscale hover:opacity-70 transition-opacity'
-                                  : 'bg-slate-800/40 border-slate-700/50 hover:bg-slate-800 hover:border-slate-600'
+                                : selectedIds.includes(channel.id)
+                                  ? 'bg-indigo-500/10 border-indigo-500/50'
+                                  : channel.disabled
+                                    ? 'bg-slate-900 border-slate-800 opacity-50 grayscale hover:opacity-70 transition-opacity'
+                                    : 'bg-slate-800/40 border-slate-700/50 hover:bg-slate-800 hover:border-slate-600'
                                 }`}
+                              onClick={(e) => {
+                                if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON') {
+                                  toggleSelection(channel.id);
+                                }
+                              }}
                             >
-                              <div
-                                {...provided.dragHandleProps}
-                                className="p-2 text-slate-500 hover:text-slate-300 cursor-grab active:cursor-grabbing self-center hidden sm:block"
-                              >
-                                <GripVertical className="w-5 h-5" />
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedIds.includes(channel.id)}
+                                  onChange={() => toggleSelection(channel.id)}
+                                  className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-slate-900 cursor-pointer"
+                                />
+                                <div
+                                  {...provided.dragHandleProps}
+                                  className="p-2 text-slate-500 hover:text-slate-300 cursor-grab active:cursor-grabbing self-center hidden sm:block"
+                                >
+                                  <GripVertical className="w-5 h-5" />
+                                </div>
                               </div>
 
                               <div className="flex-shrink-0 w-16 h-12 bg-slate-900 rounded border border-slate-700 flex items-center justify-center p-1 overflow-hidden">
@@ -692,6 +758,41 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Bulk Action Toolbar */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="bg-slate-900 border border-indigo-500/50 rounded-2xl shadow-2xl shadow-indigo-500/20 px-6 py-4 flex items-center gap-6">
+            <div className="flex flex-col">
+              <span className="text-sm font-bold text-white">{selectedIds.length} Selezionati</span>
+              <button onClick={() => setSelectedIds([])} className="text-[10px] text-indigo-400 hover:text-indigo-300 text-left font-semibold uppercase tracking-wider">Deseleziona</button>
+            </div>
+
+            <div className="h-8 w-px bg-slate-800 mx-2"></div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleBulkToggleStatus(false)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-xs font-bold border border-emerald-500/20 transition-all"
+              >
+                <Eye className="w-3.5 h-3.5" /> Attiva
+              </button>
+              <button
+                onClick={() => handleBulkToggleStatus(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-xs font-bold border border-red-500/20 transition-all"
+              >
+                <EyeOff className="w-3.5 h-3.5" /> Disattiva
+              </button>
+              <button
+                onClick={handleBulkChangeGroup}
+                className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-lg text-xs font-bold border border-indigo-500/20 transition-all"
+              >
+                <Settings className="w-3.5 h-3.5" /> Cambia Gruppo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
