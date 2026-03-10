@@ -180,62 +180,40 @@ export default function App() {
   const handleGitHubExport = async () => {
     if (!currentFile) return;
 
-    let token = localStorage.getItem('githubToken');
-    if (!token) {
-      token = window.prompt("Inserisci il tuo GitHub Personal Access Token (classic) con permessi 'repo' per salvare le modifiche direttamente sulla tua repository:");
-      if (!token) return;
-      localStorage.setItem('githubToken', token);
-    }
-
     setIsExporting(true);
     try {
-      const repoPath = 'darietto17/LiveTvPremium';
-      const tokenHeader = { Authorization: `token ${token}`, 'Content-Type': 'application/json' };
+      const saveToGithub = async (filePath, content, message) => {
+        // 1. Get current SHA first (to avoid 'merge' conflicts)
+        const getUrl = `https://api.github.com/repos/darietto17/LiveTvPremium/contents/${filePath}`;
+        const getRes = await fetch(getUrl);
+        const fileData = getRes.ok ? await getRes.json() : null;
+
+        // 2. Call our serverless proxy
+        const res = await fetch('/api/save-github', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            path: filePath,
+            content: btoa(unescape(encodeURIComponent(content))),
+            message: message,
+            sha: fileData ? fileData.sha : undefined
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Errore durante il salvataggio di ${filePath}`);
+        return data;
+      };
 
       // --- 1. Save the M3U Playlist ---
-      const m3uContent = generateM3U(channels);
-      const m3uEncoded = btoa(unescape(encodeURIComponent(m3uContent)));
-      const m3uApiUrl = `https://api.github.com/repos/${repoPath}/contents/${currentFile}`;
-
-      const m3uGet = await fetch(m3uApiUrl, { headers: { Authorization: `token ${token}` } });
-      if (!m3uGet.ok && m3uGet.status !== 404) throw new Error("Errore nel recupero della playlist da GitHub.");
-      const m3uData = m3uGet.ok ? await m3uGet.json() : null;
-
-      const m3uPut = await fetch(m3uApiUrl, {
-        method: 'PUT',
-        headers: tokenHeader,
-        body: JSON.stringify({
-          message: `Update ${currentFile} via Web App`,
-          content: m3uEncoded,
-          sha: m3uData ? m3uData.sha : undefined,
-          branch: 'master'
-        })
-      });
-      if (!m3uPut.ok) throw new Error("Errore durante il salvataggio della playlist su GitHub.");
+      await saveToGithub(currentFile, generateM3U(channels), `Update ${currentFile} via Web App`);
 
       // --- 2. Save user_rules.json ---
-      const rulesContent = JSON.stringify(rules, null, 2);
-      const rulesEncoded = btoa(unescape(encodeURIComponent(rulesContent)));
-      const rulesApiUrl = `https://api.github.com/repos/${repoPath}/contents/user_rules.json`;
-
-      const rulesGet = await fetch(rulesApiUrl, { headers: { Authorization: `token ${token}` } });
-      const rulesData = rulesGet.ok ? await rulesGet.json() : null;
-
-      const rulesPut = await fetch(rulesApiUrl, {
-        method: 'PUT',
-        headers: tokenHeader,
-        body: JSON.stringify({
-          message: `Update user_rules.json via Web App`,
-          content: rulesEncoded,
-          sha: rulesData ? rulesData.sha : undefined,
-          branch: 'master'
-        })
-      });
-      if (!rulesPut.ok) throw new Error("Errore durante il salvataggio delle regole su GitHub.");
+      await saveToGithub('user_rules.json', JSON.stringify(rules, null, 2), `Update user_rules.json via Web App`);
 
       alert(`Perfetto! Le modifiche e le regole sono state salvate con successo sulla repository.`);
     } catch (err) {
-      alert(err.message);
+      alert(`Errore: ${err.message}`);
     } finally {
       setIsExporting(false);
     }
