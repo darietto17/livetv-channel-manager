@@ -44,9 +44,9 @@ function generateM3U(channels) {
 
 const PASSWORD = import.meta.env.VITE_APP_PASSWORD || 'admin';
 const GITHUB_REPO_URLS = [
-  { name: 'Live', url: 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/main/lista.m3u' },
-  { name: 'Film', url: 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/main/film.m3u' },
-  { name: 'Serie', url: 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/main/serie.m3u' },
+  { name: 'Live', url: 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/master/lista.m3u' },
+  { name: 'Film', url: 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/master/film.m3u' },
+  { name: 'Serie', url: 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/master/serie.m3u' },
 ];
 
 export default function App() {
@@ -97,10 +97,8 @@ export default function App() {
   const handleGitHubImport = async (url) => {
     setIsLoading(true);
     try {
-      // Use corsproxy.io to bypass GitHub raw CORS restrictions
-      const proxiedUrl = `https://corsproxy.io/?${encodeURIComponent(url)}&t=${new Date().getTime()}`;
-      const response = await fetch(proxiedUrl);
-      if (!response.ok) throw new Error('Failed to fetch playlist');
+      const response = await fetch(url + '?t=' + new Date().getTime()); // cache bypass
+      if (!response.ok) throw new Error(`HTTP ${response.status} - Impossibile scaricare la playlist`);
       const text = await response.text();
       const parsed = parseM3U(text);
       setChannels(parsed);
