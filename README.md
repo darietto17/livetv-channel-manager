@@ -1,16 +1,27 @@
-# React + Vite
+# Channel Manager Web Interface
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Un'interfaccia moderna e intuitiva per gestire le tue playlist IPTV (.m3u) direttamente dal browser, integrata perfettamente con l'ecosistema LiveTvPremium.
 
-Currently, two official plugins are available:
+## ✨ Funzionalità
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Gestione Gruppi (Drag & Drop)**: Riordina le categorie trascinandole nella sidebar. Rinominazione istantanea dei gruppi.
+- **Personalizzazione Canali**: Modifica nomi, loghi e associazioni di gruppo.
+- **Operazioni di Massa (Bulk)**: Seleziona più canali per attivarli, disattivarli o spostarli di categoria in un colpo solo.
+- **Sistema di Regole Persistenti**: Le tue modifiche non vanno perse! Vengono salvate in un file `user_rules.json` sulla tua repository GitHub e applicate automaticamente dal generatore Python.
+- **GitHub Sync (Zero Token)**: Sincronizzazione sicura tramite Vercel Serverless Functions. Non è necessario inserire il proprio token nel browser.
 
-## React Compiler
+## 🚀 Setup su Vercel
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+1. **Deploy**: Collega la repository `channel-manager-web` a Vercel.
+2. **Environment Variables**:
+   - Aggiungi `GITHUB_TOKEN` nelle impostazioni di Vercel (il tuo Personal Access Token con permessi `repo`).
+   - Aggiungi `VITE_APP_PASSWORD` per proteggere l'accesso all'interfaccia.
+3. **Enjoy**: Accedi all'URL generato da Vercel e inserisci la password.
 
-## Expanding the ESLint configuration
+## 🛠️ Tech Stack
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- **React + Vite**
+- **Tailwind CSS** (Styling)
+- **Lucide React** (Icone)
+- **@hello-pangea/dnd** (Drag & Drop)
+- **Vercel Serverless Functions** (GitHub Proxy)
