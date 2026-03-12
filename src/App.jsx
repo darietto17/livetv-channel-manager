@@ -86,10 +86,11 @@ function generateM3U(channels) {
 }
 
 const PASSWORD = import.meta.env.VITE_APP_PASSWORD || 'admin';
+const PROXY_URL = 'https://script.google.com/macros/s/AKfycbybNHpTwVofPgSEg2I433cDmHbB7Nl1azrA5Xtt1OWPSaeXJkoRZl3pU0LFSiof49U_/exec';
 const GITHUB_REPO_URLS = [
-  { name: 'Live', path: 'lista.m3u', url: 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/master/lista.m3u' },
-  { name: 'Film', path: 'film.m3u', url: 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/master/film.m3u' },
-  { name: 'Serie', path: 'serie.m3u', url: 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/master/serie.m3u' },
+  { name: 'Live', path: 'lista.m3u', url: `${PROXY_URL}?repo=LiveTvPremium&path=lista.m3u` },
+  { name: 'Film', path: 'film.m3u', url: `${PROXY_URL}?repo=LiveTvPremium&path=film.m3u` },
+  { name: 'Serie', path: 'serie.m3u', url: `${PROXY_URL}?repo=LiveTvPremium&path=serie.m3u` },
 ];
 
 export default function App() {
@@ -126,8 +127,8 @@ export default function App() {
   };
 
   const copyToClipboard = (type) => {
-    const baseUrl = "https://raw.githubusercontent.com/darietto17/LiveTvAPI/main/";
-    const filename = type === 'Live' ? 'live.m3u' : type === 'Film' ? 'film.m3u' : 'series.m3u';
+    const baseUrl = PROXY_URL + "?repo=LiveTvAPI&branch=main&path=";
+    const filename = type === 'Live' ? 'data/live/channels.json' : type === 'Film' ? 'data/film/channels.json' : 'data/series/channels.json';
     let url = baseUrl + filename;
 
     if (useProxyForLinks) {
@@ -170,8 +171,8 @@ export default function App() {
       // 2. Try to fetch user_rules.json from the same repo (master branch)
       let githubRules = rules;
       try {
-        const rulesUrl = 'https://raw.githubusercontent.com/darietto17/LiveTvPremium/master/user_rules.json';
-        const rulesRes = await fetch(rulesUrl + '?t=' + new Date().getTime());
+        const rulesUrl = `${PROXY_URL}?repo=LiveTvPremium&path=user_rules.json`;
+        const rulesRes = await fetch(rulesUrl + '&t=' + new Date().getTime());
         if (rulesRes.ok) {
           githubRules = await rulesRes.json();
           setRules(githubRules);
